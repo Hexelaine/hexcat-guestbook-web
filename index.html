@@ -29,14 +29,6 @@
     input,
     textarea { font: inherit; }
 
-    .toolbar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      min-height: 24px;
-    }
-
     .status {
       color: #607d9b;
       font-size: 9px;
@@ -45,7 +37,6 @@
 
     .status.is-error { color: #b4235d; }
 
-    .refresh,
     .submit {
       border: 1px solid #8eb0d0;
       border-radius: 2px;
@@ -56,17 +47,13 @@
       cursor: pointer;
     }
 
-    .refresh { padding: 4px 8px; }
-
     .submit {
       padding: 7px 12px;
       box-shadow: 1px 1px 0 #fff inset, 2px 2px 0 #c0d8f0;
     }
 
-    .refresh:hover,
     .submit:hover { background: #d9eeff; }
 
-    .refresh:disabled,
     .submit:disabled {
       cursor: wait;
       opacity: .55;
@@ -76,7 +63,7 @@
       display: grid;
       grid-template-columns: 1fr;
       gap: 10px;
-      margin-top: 10px;
+      margin-top: 2px;
     }
 
     label {
@@ -120,7 +107,9 @@
 
     .actions {
       display: flex;
-      justify-content: flex-end;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
     }
 
     ol {
@@ -179,11 +168,6 @@
   </style>
 </head>
 <body>
-  <div class="toolbar">
-    <span class="status" data-status aria-live="polite">loading messages...</span>
-    <button class="refresh" type="button" data-refresh>refresh</button>
-  </div>
-
   <form data-form>
     <label>
       <span>nickname</span>
@@ -198,6 +182,7 @@
       <input name="website" tabindex="-1" autocomplete="off">
     </label>
     <div class="actions">
+      <span class="status" data-status aria-live="polite">loading messages...</span>
       <button class="submit" type="submit">leave message</button>
     </div>
   </form>
@@ -216,7 +201,6 @@
       const form = document.querySelector("[data-form]");
       const list = document.querySelector("[data-messages]");
       const status = document.querySelector("[data-status]");
-      const refresh = document.querySelector("[data-refresh]");
 
       function setStatus(text, isError = false) {
         status.textContent = text;
@@ -296,7 +280,6 @@
       }
 
       async function loadMessages() {
-        refresh.disabled = true;
         setStatus("loading messages...");
         try {
           const query = new URLSearchParams({
@@ -311,8 +294,6 @@
         } catch (_error) {
           renderMessages([]);
           setStatus("message board could not be reached", true);
-        } finally {
-          refresh.disabled = false;
         }
       }
 
@@ -359,7 +340,9 @@
 
       form.elements.nickname.value = storageGet(nicknameKey);
       form.addEventListener("submit", submitMessage);
-      refresh.addEventListener("click", loadMessages);
+      window.addEventListener("message", (event) => {
+        if (event.data?.type === "hexcat-guestbook-refresh") loadMessages();
+      });
       loadMessages();
     })();
   </script>
