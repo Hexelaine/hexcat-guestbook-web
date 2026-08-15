@@ -338,12 +338,45 @@
         }
       }
 
+      async function recordVisitorActivity(data) {
+        const eventType = String(data?.eventType || "").toLowerCase();
+        const visitorId = String(data?.visitorId || "").toLowerCase();
+        const page = String(data?.page || "").toLowerCase();
+        if (!new Set(["pet", "annoy", "nap"]).has(eventType)) return;
+        if (!/^[a-z0-9-]{8,64}$/.test(visitorId)) return;
+        if (!new Set(["home", "hexcat"]).has(page)) return;
+        try {
+          await request("hexcat_visitor_activity", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Prefer: "return=minimal"
+            },
+            body: JSON.stringify({
+              visitor_id: visitorId,
+              event_type: eventType,
+              page
+            })
+          });
+        } catch (_error) {
+          // Visitor actions remain local even when the private admin log is unavailable.
+        }
+      }
+
       form.elements.nickname.value = storageGet(nicknameKey);
       form.addEventListener("submit", submitMessage);
       window.addEventListener("message", (event) => {
+        if (event.origin !== "https://umuttur.neocities.org") return;
         if (event.data?.type === "hexcat-guestbook-refresh") loadMessages();
+        if (event.data?.type === "hexcat-visitor-activity") {
+          recordVisitorActivity(event.data);
+        }
       });
       loadMessages();
+      window.parent.postMessage(
+        { type: "hexcat-guestbook-ready" },
+        "https://umuttur.neocities.org"
+      );
     })();
   </script>
 </body>
