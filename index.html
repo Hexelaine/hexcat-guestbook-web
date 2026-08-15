@@ -358,9 +358,7 @@
               page
             })
           });
-        } catch (_error) {
-          // Visitor actions remain local even when the private admin log is unavailable.
-        }
+        } catch (_error) {}
       }
 
       form.elements.nickname.value = storageGet(nicknameKey);
