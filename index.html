@@ -74,7 +74,7 @@
 
     form {
       display: grid;
-      grid-template-columns: minmax(120px, .42fr) minmax(210px, 1fr);
+      grid-template-columns: 1fr;
       gap: 10px;
       margin-top: 10px;
     }
@@ -109,9 +109,6 @@
       outline: 2px solid rgba(0, 76, 153, .18);
       border-color: #004c99;
     }
-
-    .wide,
-    .actions { grid-column: 1 / -1; }
 
     .trap {
       position: absolute;
@@ -177,8 +174,6 @@
     }
 
     @media (max-width: 520px) {
-      form { grid-template-columns: 1fr; }
-      form > * { grid-column: 1; }
       .meta { align-items: flex-start; flex-direction: column; gap: 3px; }
     }
   </style>
@@ -191,7 +186,7 @@
 
   <form data-form>
     <label>
-      <span>name</span>
+      <span>nickname</span>
       <input name="nickname" maxlength="24" autocomplete="nickname" placeholder="anonymous" required>
     </label>
     <label>
