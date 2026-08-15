@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src https://vcmjjjuamnmolrmxobeu.supabase.co; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+  <meta name="color-scheme" content="light">
+  <title>hexcat message board</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: "Roboto Mono", "Courier New", monospace;
+      background: transparent;
+      color: #20384f;
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      min-height: 100%;
+      margin: 0;
+      background: transparent;
+    }
+
+    body { padding: 2px; }
+
+    button,
+    input,
+    textarea { font: inherit; }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      min-height: 24px;
+    }
+
+    .status {
+      color: #607d9b;
+      font-size: 9px;
+      line-height: 1.4;
+    }
+
+    .status.is-error { color: #b4235d; }
+
+    .refresh,
+    .submit {
+      border: 1px solid #8eb0d0;
+      border-radius: 2px;
+      background: #eef8ff;
+      color: #004c99;
+      font-size: 9px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .refresh { padding: 4px 8px; }
+
+    .submit {
+      padding: 7px 12px;
+      box-shadow: 1px 1px 0 #fff inset, 2px 2px 0 #c0d8f0;
+    }
+
+    .refresh:hover,
+    .submit:hover { background: #d9eeff; }
+
+    .refresh:disabled,
+    .submit:disabled {
+      cursor: wait;
+      opacity: .55;
+    }
+
+    form {
+      display: grid;
+      grid-template-columns: minmax(120px, .42fr) minmax(210px, 1fr);
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    label {
+      display: grid;
+      gap: 5px;
+      color: #607d9b;
+      font-size: 9px;
+      font-weight: 700;
+    }
+
+    input,
+    textarea {
+      width: 100%;
+      border: 1px solid #a0b8d0;
+      border-radius: 2px;
+      padding: 7px 8px;
+      background: #f8fcff;
+      color: #20384f;
+      font-size: 10px;
+      line-height: 1.45;
+    }
+
+    textarea {
+      min-height: 66px;
+      resize: vertical;
+    }
+
+    input:focus,
+    textarea:focus {
+      outline: 2px solid rgba(0, 76, 153, .18);
+      border-color: #004c99;
+    }
+
+    .wide,
+    .actions { grid-column: 1 / -1; }
+
+    .trap {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+    }
+
+    .actions {
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    ol {
+      display: grid;
+      gap: 8px;
+      max-height: 310px;
+      margin: 14px 0 0;
+      padding: 0 2px 0 0;
+      overflow-y: auto;
+      list-style: none;
+    }
+
+    .message {
+      padding: 9px 10px;
+      border-left: 3px solid #c0d8f0;
+      background: rgba(232, 245, 255, .78);
+    }
+
+    .meta {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      color: #004c99;
+      font-size: 10px;
+    }
+
+    time {
+      flex: 0 0 auto;
+      color: #7890a8;
+      font-size: 8px;
+      font-weight: 400;
+    }
+
+    .message p {
+      margin: 6px 0 0;
+      color: #20384f;
+      font-size: 10px;
+      line-height: 1.55;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+    }
+
+    .empty {
+      padding: 14px;
+      border: 1px dotted #c0d8f0;
+      color: #607d9b;
+      font-size: 10px;
+      font-style: italic;
+      text-align: center;
+    }
+
+    @media (max-width: 520px) {
+      form { grid-template-columns: 1fr; }
+      form > * { grid-column: 1; }
+      .meta { align-items: flex-start; flex-direction: column; gap: 3px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <span class="status" data-status aria-live="polite">loading messages...</span>
+    <button class="refresh" type="button" data-refresh>refresh</button>
+  </div>
+
+  <form data-form>
+    <label>
+      <span>name</span>
+      <input name="nickname" maxlength="24" autocomplete="nickname" placeholder="anonymous" required>
+    </label>
+    <label>
+      <span>message</span>
+      <textarea name="message" maxlength="280" rows="3" placeholder="say something to the cat..." required></textarea>
+    </label>
+    <label class="trap" aria-hidden="true">
+      <span>website</span>
+      <input name="website" tabindex="-1" autocomplete="off">
+    </label>
+    <div class="actions">
+      <button class="submit" type="submit">leave message</button>
+    </div>
+  </form>
+
+  <ol data-messages aria-live="polite"></ol>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const projectUrl = "https://vcmjjjuamnmolrmxobeu.supabase.co";
+      const publishableKey = "sb_publishable_wyjkRFKRc0ZezB9ztZ4Htw_8J6bljW6";
+      const nicknameKey = "hexcat-guestbook-nickname";
+      const lastPostKey = "hexcat-guestbook-last-post";
+      const cooldownMs = 60000;
+      const form = document.querySelector("[data-form]");
+      const list = document.querySelector("[data-messages]");
+      const status = document.querySelector("[data-status]");
+      const refresh = document.querySelector("[data-refresh]");
+
+      function setStatus(text, isError = false) {
+        status.textContent = text;
+        status.classList.toggle("is-error", isError);
+      }
+
+      function storageGet(key) {
+        try { return localStorage.getItem(key) || ""; } catch (_error) { return ""; }
+      }
+
+      function storageSet(key, value) {
+        try { localStorage.setItem(key, String(value)); } catch (_error) {}
+      }
+
+      function formatTime(value) {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return "some time ago";
+        return date.toLocaleString([], {
+          month: "short",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit"
+        }).toLowerCase();
+      }
+
+      function renderMessages(messages) {
+        list.textContent = "";
+        if (!messages.length) {
+          const empty = document.createElement("li");
+          empty.className = "empty";
+          empty.textContent = "no messages yet. disturb the silence.";
+          list.appendChild(empty);
+          return;
+        }
+
+        messages.forEach((entry) => {
+          const item = document.createElement("li");
+          item.className = "message";
+
+          const meta = document.createElement("div");
+          meta.className = "meta";
+
+          const nickname = document.createElement("strong");
+          nickname.textContent = String(entry.nickname || "anonymous").slice(0, 24);
+
+          const time = document.createElement("time");
+          time.dateTime = String(entry.created_at || "");
+          time.textContent = formatTime(entry.created_at);
+
+          const message = document.createElement("p");
+          message.textContent = String(entry.message || "").slice(0, 280);
+
+          meta.append(nickname, time);
+          item.append(meta, message);
+          list.appendChild(item);
+        });
+      }
+
+      async function request(path, options = {}) {
+        const response = await fetch(`${projectUrl}/rest/v1/${path}`, {
+          ...options,
+          mode: "cors",
+          credentials: "omit",
+          referrerPolicy: "no-referrer",
+          headers: {
+            apikey: publishableKey,
+            Authorization: `Bearer ${publishableKey}`,
+            Accept: "application/json",
+            ...(options.headers || {})
+          }
+        });
+
+        if (!response.ok) throw new Error("message board could not be reached");
+        if (response.status === 204) return null;
+        const text = await response.text();
+        return text ? JSON.parse(text) : null;
+      }
+
+      async function loadMessages() {
+        refresh.disabled = true;
+        setStatus("loading messages...");
+        try {
+          const query = new URLSearchParams({
+            select: "id,nickname,message,created_at",
+            is_visible: "eq.true",
+            order: "created_at.desc",
+            limit: "30"
+          });
+          const messages = await request(`hexcat_messages?${query}`);
+          renderMessages(Array.isArray(messages) ? messages : []);
+          setStatus(messages.length ? `${messages.length} messages` : "be the first one");
+        } catch (_error) {
+          renderMessages([]);
+          setStatus("message board could not be reached", true);
+        } finally {
+          refresh.disabled = false;
+        }
+      }
+
+      async function submitMessage(event) {
+        event.preventDefault();
+        const button = form.querySelector("button[type='submit']");
+        const nickname = form.elements.nickname.value.trim();
+        const message = form.elements.message.value.trim();
+        if (form.elements.website.value) return;
+        if (!nickname || !message) {
+          setStatus("name and message are required", true);
+          return;
+        }
+
+        const lastPost = Number.parseInt(storageGet(lastPostKey) || "0", 10) || 0;
+        const remaining = cooldownMs - (Date.now() - lastPost);
+        if (remaining > 0) {
+          setStatus(`wait ${Math.ceil(remaining / 1000)} seconds`, true);
+          return;
+        }
+
+        button.disabled = true;
+        setStatus("leaving message...");
+        try {
+          await request("hexcat_messages", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Prefer: "return=minimal"
+            },
+            body: JSON.stringify({ nickname, message })
+          });
+          storageSet(nicknameKey, nickname);
+          storageSet(lastPostKey, Date.now());
+          form.elements.message.value = "";
+          setStatus("message left for the next visitor");
+          await loadMessages();
+        } catch (_error) {
+          setStatus("message could not be sent", true);
+        } finally {
+          button.disabled = false;
+        }
+      }
+
+      form.elements.nickname.value = storageGet(nicknameKey);
+      form.addEventListener("submit", submitMessage);
+      refresh.addEventListener("click", loadMessages);
+      loadMessages();
+    })();
+  </script>
+</body>
+</html>
