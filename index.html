@@ -267,7 +267,6 @@
           referrerPolicy: "no-referrer",
           headers: {
             apikey: publishableKey,
-            Authorization: `Bearer ${publishableKey}`,
             Accept: "application/json",
             ...(options.headers || {})
           }
@@ -361,16 +360,36 @@
         } catch (_error) {}
       }
 
+      async function shareNowPlaying() {
+        let track = null;
+        try {
+          const query = new URLSearchParams({
+            select: "title,artist,is_playing,updated_at",
+            id: "eq.1",
+            limit: "1"
+          });
+          const rows = await request(`hexcat_now_playing?${query}`);
+          track = Array.isArray(rows) ? rows[0] || null : null;
+        } catch (_error) {}
+        window.parent.postMessage(
+          { type: "hexcat-now-playing", track },
+          "https://umuttur.neocities.org"
+        );
+      }
+
       form.elements.nickname.value = storageGet(nicknameKey);
       form.addEventListener("submit", submitMessage);
       window.addEventListener("message", (event) => {
         if (event.origin !== "https://umuttur.neocities.org") return;
         if (event.data?.type === "hexcat-guestbook-refresh") loadMessages();
+        if (event.data?.type === "hexcat-now-playing-refresh") shareNowPlaying();
         if (event.data?.type === "hexcat-visitor-activity") {
           recordVisitorActivity(event.data);
         }
       });
       loadMessages();
+      shareNowPlaying();
+      window.setInterval(shareNowPlaying, 10000);
       window.parent.postMessage(
         { type: "hexcat-guestbook-ready" },
         "https://umuttur.neocities.org"
