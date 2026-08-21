@@ -201,6 +201,8 @@
       const form = document.querySelector("[data-form]");
       const list = document.querySelector("[data-messages]");
       const status = document.querySelector("[data-status]");
+      let roomEnabled = false;
+      let roomLoading = false;
 
       function setStatus(text, isError = false) {
         status.textContent = text;
@@ -377,6 +379,115 @@
         );
       }
 
+      function safeRoomIdentity(data) {
+        const visitorId = String(data?.visitorId || "").toLowerCase();
+        const nickname = String(data?.nickname || "visitor").trim().slice(0, 24);
+        const color = String(data?.color || "#7aa8d8").toLowerCase();
+        if (!/^[a-z0-9-]{8,64}$/.test(visitorId)) return null;
+        if (!nickname || !/^#[0-9a-f]{6}$/.test(color)) return null;
+        return { visitorId, nickname, color };
+      }
+
+      async function loadRoomState() {
+        if (!roomEnabled || roomLoading) return;
+        roomLoading = true;
+        let available = true;
+        let presence = [];
+        let marks = [];
+        try {
+          const presenceQuery = new URLSearchParams({
+            select: "visitor_id,nickname,color,x,y,mood,updated_at",
+            order: "updated_at.desc",
+            limit: "40"
+          });
+          const marksQuery = new URLSearchParams({
+            select: "id,visitor_id,nickname,kind,x,y,color,message,created_at",
+            order: "created_at.desc",
+            limit: "100"
+          });
+          [presence, marks] = await Promise.all([
+            request(`hexcat_room_presence?${presenceQuery}`),
+            request(`hexcat_room_marks?${marksQuery}`)
+          ]);
+        } catch (_error) {
+          available = false;
+        } finally {
+          roomLoading = false;
+        }
+        window.parent.postMessage(
+          {
+            type: "hexcat-room-state",
+            available,
+            presence: Array.isArray(presence) ? presence : [],
+            marks: Array.isArray(marks) ? marks : []
+          },
+          "https://umuttur.neocities.org"
+        );
+      }
+
+      async function touchRoom(data) {
+        const identity = safeRoomIdentity(data);
+        if (!identity) return;
+        roomEnabled = true;
+        const x = Math.max(0, Math.min(100, Math.round(Number(data?.x) || 50)));
+        const y = Math.max(0, Math.min(100, Math.round(Number(data?.y) || 50)));
+        const mood = new Set(["idle", "pet", "annoy", "nap", "sticker"])
+          .has(data?.mood) ? data.mood : "idle";
+        try {
+          await request("rpc/hexcat_room_touch", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Prefer: "return=minimal"
+            },
+            body: JSON.stringify({
+              p_visitor_id: identity.visitorId,
+              p_nickname: identity.nickname,
+              p_color: identity.color,
+              p_x: x,
+              p_y: y,
+              p_mood: mood
+            })
+          });
+        } catch (_error) {}
+        loadRoomState();
+      }
+
+      async function leaveRoomMark(data) {
+        const identity = safeRoomIdentity(data);
+        if (!identity) return;
+        roomEnabled = true;
+        const kind = new Set(["heart", "star", "paw", "note"])
+          .has(data?.kind) ? data.kind : "paw";
+        const x = Math.max(0, Math.min(100, Math.round(Number(data?.x) || 50)));
+        const y = Math.max(0, Math.min(100, Math.round(Number(data?.y) || 50)));
+        const message = String(data?.message || "").trim().slice(0, 80);
+        try {
+          await request("rpc/hexcat_room_leave_mark", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Prefer: "return=representation"
+            },
+            body: JSON.stringify({
+              p_visitor_id: identity.visitorId,
+              p_nickname: identity.nickname,
+              p_kind: kind,
+              p_x: x,
+              p_y: y,
+              p_color: identity.color,
+              p_message: message
+            })
+          });
+          await touchRoom({ ...data, mood: "sticker" });
+        } catch (_error) {
+          window.parent.postMessage(
+            { type: "hexcat-room-mark-error", message: "wait a little before dropping another thing." },
+            "https://umuttur.neocities.org"
+          );
+        }
+      }
+
       form.elements.nickname.value = storageGet(nicknameKey);
       form.addEventListener("submit", submitMessage);
       window.addEventListener("message", (event) => {
@@ -386,10 +497,13 @@
         if (event.data?.type === "hexcat-visitor-activity") {
           recordVisitorActivity(event.data);
         }
+        if (event.data?.type === "hexcat-room-ping") touchRoom(event.data);
+        if (event.data?.type === "hexcat-room-mark") leaveRoomMark(event.data);
       });
       loadMessages();
       shareNowPlaying();
       window.setInterval(shareNowPlaying, 10000);
+      window.setInterval(loadRoomState, 4000);
       window.parent.postMessage(
         { type: "hexcat-guestbook-ready" },
         "https://umuttur.neocities.org"
