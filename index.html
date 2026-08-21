@@ -383,9 +383,11 @@
         const visitorId = String(data?.visitorId || "").toLowerCase();
         const nickname = String(data?.nickname || "visitor").trim().slice(0, 24);
         const color = String(data?.color || "#7aa8d8").toLowerCase();
+        const ownerToken = String(data?.ownerToken || "");
         if (!/^[a-z0-9-]{8,64}$/.test(visitorId)) return null;
         if (!nickname || !/^#[0-9a-f]{6}$/.test(color)) return null;
-        return { visitorId, nickname, color };
+        if (!/^[A-Za-z0-9_-]{32,128}$/.test(ownerToken)) return null;
+        return { visitorId, nickname, color, ownerToken };
       }
 
       async function loadRoomState() {
@@ -401,7 +403,7 @@
             limit: "40"
           });
           const marksQuery = new URLSearchParams({
-            select: "id,visitor_id,nickname,kind,x,y,color,message,created_at",
+            select: "id,visitor_id,nickname,kind,x,y,color,message,is_movable,created_at",
             order: "created_at.desc",
             limit: "100"
           });
@@ -476,13 +478,44 @@
               p_x: x,
               p_y: y,
               p_color: identity.color,
-              p_message: message
+              p_message: message,
+              p_owner_token: identity.ownerToken
             })
           });
           await touchRoom({ ...data, mood: "sticker" });
         } catch (_error) {
           window.parent.postMessage(
             { type: "hexcat-room-mark-error", message: "wait a little before dropping another thing." },
+            "https://umuttur.neocities.org"
+          );
+        }
+      }
+
+      async function moveRoomMark(data) {
+        const identity = safeRoomIdentity(data);
+        const markId = Number.parseInt(String(data?.id || ""), 10);
+        if (!identity || !Number.isSafeInteger(markId) || markId <= 0) return;
+        const x = Math.max(0, Math.min(100, Math.round(Number(data?.x) || 50)));
+        const y = Math.max(0, Math.min(100, Math.round(Number(data?.y) || 50)));
+        try {
+          await request("rpc/hexcat_room_move_mark", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Prefer: "return=minimal"
+            },
+            body: JSON.stringify({
+              p_id: markId,
+              p_visitor_id: identity.visitorId,
+              p_owner_token: identity.ownerToken,
+              p_x: x,
+              p_y: y
+            })
+          });
+          loadRoomState();
+        } catch (_error) {
+          window.parent.postMessage(
+            { type: "hexcat-room-mark-error", message: "that one will not move for you." },
             "https://umuttur.neocities.org"
           );
         }
@@ -499,6 +532,7 @@
         }
         if (event.data?.type === "hexcat-room-ping") touchRoom(event.data);
         if (event.data?.type === "hexcat-room-mark") leaveRoomMark(event.data);
+        if (event.data?.type === "hexcat-room-move-mark") moveRoomMark(event.data);
       });
       loadMessages();
       shareNowPlaying();
